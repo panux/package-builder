@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"io/ioutil"
 
 	"../.."
@@ -22,10 +21,8 @@ func main() {
 	flag.Parse()
 	dat, err := ioutil.ReadFile(infile)
 	chk(err)
-	fmt.Println(string(dat))
 	r, err := panuxpackager.ParseRaw(dat)
 	chk(err)
-	fmt.Println(r)
 	pg, err := r.Preprocess()
 	chk(err)
 	chk(pg.InitDir(dir))
