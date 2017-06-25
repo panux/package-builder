@@ -25,6 +25,7 @@ type RawPackageGenerator struct {
 	Script            []string
 	Dependencies      []string
 	BuildDependencies []string
+	Arch              string
 	Data              map[string]interface{}
 }
 

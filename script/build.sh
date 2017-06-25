@@ -10,6 +10,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 DIR=$(mktemp -d)
+ARCH=$(uname -m)
 
 function cleanup {
     rm -rf $DIR
@@ -17,7 +18,7 @@ function cleanup {
 trap cleanup EXIT
 
 echo "Parsing PackageGenerator and downloading files"
-pkgenconvert -in $1 -dir $DIR
+pkgenconvert -in $1 -dir $DIR -arch $ARCH
 
 #currently using alpine docker containers
 apk add --no-cache $(cat $DIR/.builddeps.list)
