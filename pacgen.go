@@ -19,6 +19,7 @@ import (
 
 //RawPackageGenerator represents a PackageGenerator parsed from YAML
 type RawPackageGenerator struct {
+	Name              string
 	Tools             []string
 	Version           string
 	Sources           []string
@@ -50,6 +51,7 @@ var tools map[string]*Tool
 
 //PackageGenerator is a preprocessed package generator
 type PackageGenerator struct {
+	Name              string
 	Tools             []*Tool
 	Version           *version.Version
 	Sources           []*url.URL
@@ -145,6 +147,7 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		return npg, err
 	}
 	pg.Script = buf.String()
+	pg.Name = r.Name
 	return
 }
 
@@ -208,21 +211,27 @@ func (pg PackageGenerator) InitDir(path string) error {
 	if err != nil {
 		return err
 	}
-	//Write dependencies to file
-	dpath := filepath.Join(outpath, ".deps.list")
-	err = ioutil.WriteFile(dpath, []byte(strings.Join(pg.Dependencies, "\n")), 0700)
+	//Write package info to file
+	pkginfo := struct {
+		Name         string
+		Version      string
+		Dependencies []string
+	}{
+		Name:         pg.Name,
+		Version:      pg.Version.String(),
+		Dependencies: pg.Dependencies,
+	}
+	o, err := yaml.Marshal(pkginfo)
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(filepath.Join(outpath, ".pkginfo"), o, 0700)
 	if err != nil {
 		return err
 	}
 	//Write build-dependencies to file
 	bdpath := filepath.Join(path, ".builddeps.list")
 	err = ioutil.WriteFile(bdpath, []byte(strings.Join(pg.BuildDependencies, "\n")), 0700)
-	if err != nil {
-		return err
-	}
-	//Write version to file
-	vpath := filepath.Join(outpath, ".version")
-	err = ioutil.WriteFile(vpath, []byte(pg.Version.String()), 0700)
 	if err != nil {
 		return err
 	}
