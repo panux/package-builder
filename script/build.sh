@@ -18,7 +18,7 @@ function cleanup {
 trap cleanup EXIT
 
 echo "Parsing PackageGenerator and downloading files"
-pkgenconvert -in $1 -dir $DIR -arch $ARCH
+pkgenconvert -in $1 -dir $DIR -arch $ARCH || { echo "Build failed"; exit 1; }
 
 #currently using alpine docker containers
 apk add --no-cache $(cat $DIR/.builddeps.list)
