@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"io/ioutil"
+	"log"
 
 	"../.."
 )
@@ -28,5 +30,8 @@ func main() {
 	r.Arch = arch
 	pg, err := r.Preprocess()
 	chk(err)
+	debug, err := json.Marshal(pg)
+	chk(err)
+	log.Println(string(debug))
 	chk(pg.InitDir(dir))
 }

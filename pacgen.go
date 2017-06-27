@@ -2,6 +2,7 @@ package panuxpackager
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -51,7 +53,7 @@ var tools map[string]*Tool
 
 //PackageGenerator is a preprocessed package generator
 type PackageGenerator struct {
-	Name              string
+	Names             []string
 	Tools             []*Tool
 	Version           *version.Version
 	Sources           []*url.URL
@@ -123,7 +125,7 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		}
 	}
 	pg.Dependencies = make([]string, len(r.Dependencies))
-	for i, v := range r.BuildDependencies {
+	for i, v := range r.Dependencies {
 		tmpl, err := template.New("dependencies").Parse(v)
 		if err != nil {
 			return npg, err
@@ -147,7 +149,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		return npg, err
 	}
 	pg.Script = buf.String()
-	pg.Name = r.Name
+	pg.Names = strings.Split(r.Name, ",")
+	for i, v := range pg.Names {
+		pg.Names[i] = strings.TrimSpace(v)
+	}
 	return
 }
 
@@ -164,6 +169,12 @@ func (pg PackageGenerator) InitDir(path string) error {
 	if err != nil {
 		return err
 	}
+	for _, v := range pg.Names {
+		err = os.Mkdir(filepath.Join(outpath, v), os.ModePerm)
+		if err != nil {
+			return err
+		}
+	}
 	//Download sources (in parallell)
 	cmpl := make(chan error)
 	for _, v := range pg.Sources {
@@ -172,7 +183,7 @@ func (pg PackageGenerator) InitDir(path string) error {
 				panic(err)
 			}
 		}
-		getaddr := v.String()
+		getaddr := v
 		gpath := v.Path
 		go func() {
 			defer func() { recover() }() //recover any error from termination
@@ -185,15 +196,31 @@ func (pg PackageGenerator) InitDir(path string) error {
 				}
 			}()
 			log.Printf("Downloading %s\n", getaddr)
-			g, err := http.Get(getaddr)
-			chk(err)
-			defer func() { chk(g.Body.Close()) }()
-			faddr := filepath.Join(srcpath, ""+filepath.Base(gpath))
-			f, err := os.OpenFile(faddr, os.O_CREATE|os.O_WRONLY, 0644)
-			chk(err)
-			defer func() { chk(f.Close()) }()
-			_, err = io.Copy(f, g.Body)
-			chk(err)
+			switch getaddr.Scheme {
+			case "http":
+				panic(errors.New("Insecure HTTP not supported in package files"))
+			case "https":
+				g, err := http.Get(getaddr.String())
+				chk(err)
+				defer func() { chk(g.Body.Close()) }()
+				faddr := filepath.Join(srcpath, filepath.Base(gpath))
+				f, err := os.OpenFile(faddr, os.O_CREATE|os.O_WRONLY, 0644)
+				chk(err)
+				defer func() { chk(f.Close()) }()
+				_, err = io.Copy(f, g.Body)
+				chk(err)
+			case "git":
+				destpath := filepath.Join(srcpath, filepath.Base(getaddr.Path))
+				cloneaddr := *getaddr
+				cloneaddr.RawQuery = ""
+				cmd := exec.Command("git", "clone", cloneaddr.String(), destpath)
+				chk(cmd.Run())
+				tag := getaddr.Query().Get("tag")
+				if tag != "" {
+					cmd = exec.Command("git", "-C", destpath, "checkout", tag)
+					chk(cmd.Run())
+				}
+			}
 		}()
 	}
 	n := len(pg.Sources)
@@ -211,27 +238,35 @@ func (pg PackageGenerator) InitDir(path string) error {
 	if err != nil {
 		return err
 	}
-	//Write package info to file
-	pkginfo := struct {
-		Name         string
-		Version      string
-		Dependencies []string
-	}{
-		Name:         pg.Name,
-		Version:      pg.Version.String(),
-		Dependencies: pg.Dependencies,
-	}
-	o, err := yaml.Marshal(pkginfo)
-	if err != nil {
-		return err
-	}
-	err = ioutil.WriteFile(filepath.Join(outpath, ".pkginfo"), o, 0700)
-	if err != nil {
-		return err
+	for _, v := range pg.Names {
+		//Write package info to file
+		pkginfo := struct {
+			Name         string
+			Version      string
+			Dependencies []string
+		}{
+			Name:         v,
+			Version:      pg.Version.String(),
+			Dependencies: pg.Dependencies,
+		}
+		o, err := yaml.Marshal(pkginfo)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(filepath.Join(outpath, v, ".pkginfo"), o, 0700)
+		if err != nil {
+			return err
+		}
 	}
 	//Write build-dependencies to file
 	bdpath := filepath.Join(path, ".builddeps.list")
 	err = ioutil.WriteFile(bdpath, []byte(strings.Join(pg.BuildDependencies, "\n")), 0700)
+	if err != nil {
+		return err
+	}
+	//Write package output list to file
+	plistpath := filepath.Join(path, ".pkglist")
+	err = ioutil.WriteFile(plistpath, []byte(strings.Join(pg.Names, "\n")), 0700)
 	if err != nil {
 		return err
 	}
