@@ -5,12 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
-	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -21,12 +16,12 @@ import (
 
 //RawPackageGenerator represents a PackageGenerator parsed from YAML
 type RawPackageGenerator struct {
-	Name              string
+	Packages          pkgmap
+	OneShell          bool
 	Tools             []string
 	Version           string
 	Sources           []string
 	Script            []string
-	Dependencies      []string
 	BuildDependencies []string
 	Arch              string
 	Data              map[string]interface{}
@@ -53,12 +48,12 @@ var tools map[string]*Tool
 
 //PackageGenerator is a preprocessed package generator
 type PackageGenerator struct {
-	Names             []string
+	Pkgs              pkgmap
+	OneShell          bool
 	Tools             []*Tool
 	Version           *version.Version
 	Sources           []*url.URL
 	Script            string
-	Dependencies      []string
 	BuildDependencies []string
 }
 
@@ -72,8 +67,14 @@ func (pg PackageGenerator) toolfuncs() (m map[string]interface{}) {
 	return
 }
 
+type pkgmap map[string]*pkg
+type pkg struct {
+	Dependencies []string
+}
+
 //Preprocess runs preprocessing steps on the RawPackageGenerator in order to convert it to a PackageGenerator
 func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
+	pg.OneShell = r.OneShell
 	npg := PackageGenerator{}
 	for _, name := range r.Tools {
 		tool := tools[name]
@@ -124,19 +125,28 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 			pg.BuildDependencies = append(pg.BuildDependencies, v.Dependencies...)
 		}
 	}
-	pg.Dependencies = make([]string, len(r.Dependencies))
-	for i, v := range r.Dependencies {
-		tmpl, err := template.New("dependencies").Parse(v)
-		if err != nil {
-			return npg, err
+	nval := []string{}
+	pg.Pkgs = make(pkgmap)
+	for x, y := range r.Packages {
+		pg.Pkgs[x] = new(pkg)
+		if y != nil && y.Dependencies != nil {
+			pg.Pkgs[x].Dependencies = make([]string, len(y.Dependencies))
+			for i, v := range y.Dependencies {
+				tmpl, err := template.New("dependencies").Parse(v)
+				if err != nil {
+					return npg, err
+				}
+				tmpl.Funcs(tf)
+				buf := bytes.NewBuffer(nil)
+				err = tmpl.Execute(buf, r)
+				if err != nil {
+					return npg, err
+				}
+				pg.Pkgs[x].Dependencies[i] = buf.String()
+			}
+		} else {
+			pg.Pkgs[x].Dependencies = nval
 		}
-		tmpl.Funcs(tf)
-		buf := bytes.NewBuffer(nil)
-		err = tmpl.Execute(buf, r)
-		if err != nil {
-			return npg, err
-		}
-		pg.Dependencies[i] = buf.String()
 	}
 	stmpl, err := template.New("script").Parse(strings.Join(r.Script, "\n"))
 	if err != nil {
@@ -149,124 +159,142 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		return npg, err
 	}
 	pg.Script = buf.String()
-	pg.Names = strings.Split(r.Name, ",")
-	for i, v := range pg.Names {
-		pg.Names[i] = strings.TrimSpace(v)
-	}
 	return
 }
 
-//InitDir initializes a directory for generating the package
-func (pg PackageGenerator) InitDir(path string) error {
-	//Make workdir structure
-	srcpath := filepath.Join(path, "src")
-	outpath := filepath.Join(path, "out")
-	err := os.Mkdir(srcpath, os.ModePerm)
-	if err != nil {
-		return err
+func dirGen(path string, w io.Writer) error {
+	dir := filepath.Dir(path)
+	if dir == "." {
+		dir = ""
 	}
-	err = os.Mkdir(outpath, os.ModePerm)
-	if err != nil {
-		return err
-	}
-	for _, v := range pg.Names {
-		err = os.Mkdir(filepath.Join(outpath, v), os.ModePerm)
-		if err != nil {
-			return err
-		}
-	}
-	//Download sources (in parallell)
-	cmpl := make(chan error)
-	for _, v := range pg.Sources {
-		chk := func(err error) {
-			if err != nil {
-				panic(err)
-			}
-		}
-		getaddr := v
-		gpath := v.Path
-		go func() {
-			defer func() { recover() }() //recover any error from termination
-			defer func() {
-				err := recover()
-				if err != nil {
-					cmpl <- err.(error)
-				} else {
-					cmpl <- nil
-				}
-			}()
-			log.Printf("Downloading %s\n", getaddr)
-			switch getaddr.Scheme {
-			case "http":
-				panic(errors.New("Insecure HTTP not supported in package files"))
-			case "https":
-				g, err := http.Get(getaddr.String())
-				chk(err)
-				defer func() { chk(g.Body.Close()) }()
-				faddr := filepath.Join(srcpath, filepath.Base(gpath))
-				f, err := os.OpenFile(faddr, os.O_CREATE|os.O_WRONLY, 0644)
-				chk(err)
-				defer func() { chk(f.Close()) }()
-				_, err = io.Copy(f, g.Body)
-				chk(err)
-			case "git":
-				destpath := filepath.Join(srcpath, filepath.Base(getaddr.Path))
-				cloneaddr := *getaddr
-				cloneaddr.RawQuery = ""
-				cmd := exec.Command("git", "clone", cloneaddr.String(), destpath)
-				chk(cmd.Run())
-				tag := getaddr.Query().Get("tag")
-				if tag != "" {
-					cmd = exec.Command("git", "-C", destpath, "checkout", tag)
-					chk(cmd.Run())
-				}
-			}
-		}()
-	}
-	n := len(pg.Sources)
-	for n > 0 {
-		err := <-cmpl
-		if err != nil {
-			close(cmpl)
-			return err
-		}
-		n--
-	}
-	//Write script to file
-	spath := filepath.Join(path, "script.sh")
-	err = ioutil.WriteFile(spath, []byte(pg.Script), 0700)
-	if err != nil {
-		return err
-	}
-	for _, v := range pg.Names {
-		//Write package info to file
+	_, err := fmt.Fprintf(w, "%s: %s\n\tmkdir %s\n\n", path, dir, path)
+	return err
+}
+
+//GenMake generates the Makefile
+func (pg PackageGenerator) GenMake(w io.Writer) error {
+	//Write package info strings
+	version := pg.Version.String()
+	for n, v := range pg.Pkgs {
 		pkginfo := struct {
 			Name         string
 			Version      string
 			Dependencies []string
 		}{
-			Name:         v,
-			Version:      pg.Version.String(),
-			Dependencies: pg.Dependencies,
+			Name:         n,
+			Version:      version,
+			Dependencies: v.Dependencies,
 		}
-		o, err := yaml.Marshal(pkginfo)
+		dat, err := yaml.Marshal(pkginfo)
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(filepath.Join(outpath, v, ".pkginfo"), o, 0700)
+		ystr := string(dat)
+		_, err = fmt.Fprintf(w, "define %s_pkginfo = \n%s\nendef\n", strings.Replace(n, "-", "_", -1), ystr)
 		if err != nil {
 			return err
 		}
 	}
-	//Write build-dependencies to file
-	bdpath := filepath.Join(path, ".builddeps.list")
-	err = ioutil.WriteFile(bdpath, []byte(strings.Join(pg.BuildDependencies, "\n")), 0700)
+	//Write directory structure generation
+	err := dirGen("src", w)
 	if err != nil {
 		return err
 	}
-	//Write package output list to file
-	plistpath := filepath.Join(path, ".pkglist")
-	err = ioutil.WriteFile(plistpath, []byte(strings.Join(pg.Names, "\n")), 0700)
+	err = dirGen("out", w)
+	if err != nil {
+		return err
+	}
+	err = dirGen("tars", w)
+	if err != nil {
+		return err
+	}
+	//Sources
+	srcs := make([]string, len(pg.Sources))
+	for i, v := range pg.Sources {
+		fname := filepath.Base(v.Path)
+		switch v.Scheme {
+		case "https":
+			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tcurl %s > src/%s\n\n", fname, v.String(), fname)
+			if err != nil {
+				return err
+			}
+		case "git":
+			if filepath.Ext(fname) == ".git" {
+				fname = fname[:len(fname)-5]
+			}
+			u := *v
+			u.RawQuery = ""
+			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
+			if err != nil {
+				return err
+			}
+		default:
+			return errors.New("Unsupported source scheme %s")
+		}
+		srcs[i] = "src/" + fname
+	}
+	_, err = fmt.Fprintf(w, "sources: %s\n\n", strings.Join(srcs, " "))
+	if err != nil {
+		return err
+	}
+	//BuildDependencies
+	if len(pg.BuildDependencies) > 0 {
+		_, err = fmt.Fprintf(w, "builddeps: \n\tapk add --no-cache %s\n\ttouch builddeps\n\n", strings.Join(pg.BuildDependencies, " "))
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = fmt.Fprintln(w, "builddeps: ")
+		if err != nil {
+			return err
+		}
+	}
+	//Destination directories
+	dests := make([]string, len(pg.Pkgs))
+	i := 0
+	for n := range pg.Pkgs {
+		dests[i] = "out/" + n
+		i++
+		err = dirGen("out/"+n, w)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = fmt.Fprintf(w, "destinations: %s\n\n", strings.Join(dests, " "))
+	if err != nil {
+		return err
+	}
+	//Build script
+	pr := ""
+	if pg.OneShell {
+		pr = ".ONESHELL:\n"
+	}
+	_, err = fmt.Fprintf(w, "%sbuild: sources builddeps src out\n\t%s\n\ttouch build\n\n", pr, strings.Join(strings.Split(pg.Script, "\n"), "\n\t"))
+	if err != nil {
+		return err
+	}
+	//Write out package info files
+	for n := range pg.Pkgs {
+		_, err = fmt.Fprintf(w, "export %s_pkginfo\nout/%s/.pkginfo: out/%s\n\techo \"$$%s_pkginfo\" > out/%s/.pkginfo\n\n", strings.Replace(n, "-", "_", -1), n, n, strings.Replace(n, "-", "_", -1), n)
+		if err != nil {
+			return err
+		}
+	}
+	//Tar packages
+	for n := range pg.Pkgs {
+		_, err = fmt.Fprintf(w, "tars/%s.tar.xz: tars out/%s/.pkginfo build\n\ttar -cf tars/%s.tar.xz -C out/%s .\n\n", n, n, n, n)
+		if err != nil {
+			return err
+		}
+	}
+	//Generate main target
+	pkgtargs := make([]string, len(pg.Pkgs))
+	i = 0
+	for n := range pg.Pkgs {
+		pkgtargs[i] = fmt.Sprintf("tars/%s.tar.xz", n)
+		i++
+	}
+	_, err = fmt.Fprintf(w, "all: %s\n\n", strings.Join(pkgtargs, " "))
 	if err != nil {
 		return err
 	}

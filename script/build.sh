@@ -10,38 +10,27 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 DIR=$(mktemp -d)
-OUTDIR=$(mktemp -d)
 ARCH=$(uname -m)
 
 function cleanup {
-    rm -rf $DIR $OUTDIR
+    rm -rf $DIR
 }
-trap cleanup EXIT
+# trap cleanup EXIT
 
 echo "Parsing PackageGenerator and downloading files"
-pkgenconvert -in $1 -dir $DIR -arch $ARCH || { echo "Build prep failed"; exit 1; }
+pkgenconvert -in $1 -out $DIR/Makefile -arch $ARCH || { echo "Build prep failed"; exit 1; }
+cat $DIR/Makefile
 
-#currently using alpine docker containers
-apk add --no-cache $(cat $DIR/.builddeps.list)  || { echo "Installation of build dependencies failed"; exit 2; }
-
-echo "Done preparing"
-
-#run build in a subshell
+#run build
 echo "Starting build. . . "
-(
-    cd $DIR
-    bash script.sh || { echo "Build failed"; exit 3; }
-)
+make -C $DIR -j 30 all || { echo "Build failed"; exit 3; }
 echo "Build complete"
 
-echo "Tarring outputs"
-for pkg in `cat $DIR/.pkglist`; do
-    tar -cvf $OUTDIR/$pkg.tar.xz -C $DIR/out/$pkg .
-done
-
 echo "Uploading outputs"
-for pkg in `cat $DIR/.pkglist`; do
-    echo $(curl --upload-file $OUTDIR/$pkg.tar.xz https://transfer.sh/$pkg.tar.xz)
+for tar in `ls $DIR/tars`; do
+    echo $tar:
+    tar -tf $DIR/tars/$tar
+    echo $(curl --upload-file $DIR/tars/$tar https://transfer.sh/$tar)
 done
 
 echo Done
