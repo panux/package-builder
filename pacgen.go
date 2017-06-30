@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/hashicorp/go-version"
+	"github.com/panux/encoding-sh"
 	"gopkg.in/yaml.v2"
 )
 
@@ -185,7 +186,7 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 			Version:      version,
 			Dependencies: v.Dependencies,
 		}
-		dat, err := yaml.Marshal(pkginfo)
+		dat, err := sh.Encode(pkginfo)
 		if err != nil {
 			return err
 		}
