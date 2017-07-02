@@ -1,4 +1,4 @@
-# package-builder (WIP)
+# package-builder (WIP) [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/panux/panux-dev)
 A tool to create panux packages
 
 [Packages here](https://github.com/panux/packages-main)
