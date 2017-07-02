@@ -7,6 +7,7 @@ A tool to create panux packages
 Example usage:
 ```
 git clone https://github.com/panux/packages-main.git
-sudo docker run --rm -v $(realpath packages-main):/build panux/package-builder /build/busybox.pkgen
+mkdir out
+sudo docker run --rm -v $(realpath packages-main):/build -v $(realpath out):/out panux/package-builder /build/busybox.pkgen /out
 ```
-Resulting package will be uploaded to [transfer.sh](https://transfer.sh/) and the link will be printed.
+Resulting package will be moved to out
