@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -24,9 +23,7 @@ func main() {
 	flag.StringVar(&out, "out", "", "file to output to")
 	flag.StringVar(&arch, "arch", "x86_64", "cpu architecture")
 	flag.Parse()
-	dat, err := ioutil.ReadFile(infile)
-	chk(err)
-	r, err := panuxpackager.ParseRaw(dat)
+	r, err := panuxpackager.ParseFile(infile)
 	chk(err)
 	r.Arch = arch
 	pg, err := r.Preprocess()

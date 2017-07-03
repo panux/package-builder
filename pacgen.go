@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -17,6 +19,7 @@ import (
 
 //RawPackageGenerator represents a PackageGenerator parsed from YAML
 type RawPackageGenerator struct {
+	SrcPath           string
 	Packages          pkgmap
 	OneShell          bool
 	Tools             []string
@@ -37,6 +40,19 @@ func ParseRaw(in []byte) (pg RawPackageGenerator, err error) {
 	return
 }
 
+//ParseFile parses a RawPackageGenerator from data in a file
+func ParseFile(file string) (pg RawPackageGenerator, err error) {
+	dat, err := ioutil.ReadFile(file)
+	if err != nil {
+		return RawPackageGenerator{}, err
+	}
+	pg, err = ParseRaw(dat)
+	if err != nil {
+		pg.SrcPath = file
+	}
+	return
+}
+
 //Tool is a tool for a PackageGenerator
 type Tool struct {
 	Name         string
@@ -49,6 +65,7 @@ var tools map[string]*Tool
 
 //PackageGenerator is a preprocessed package generator
 type PackageGenerator struct {
+	SrcPath           string
 	Pkgs              pkgmap
 	OneShell          bool
 	Tools             []*Tool
@@ -75,6 +92,7 @@ type pkg struct {
 
 //Preprocess runs preprocessing steps on the RawPackageGenerator in order to convert it to a PackageGenerator
 func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
+	pg.SrcPath = r.SrcPath
 	pg.OneShell = r.OneShell
 	npg := PackageGenerator{}
 	for _, name := range r.Tools {
@@ -228,6 +246,17 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 			u := *v
 			u.RawQuery = ""
 			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
+			if err != nil {
+				return err
+			}
+		case "file":
+			dir, _ := filepath.Split(pg.SrcPath)
+			dat, err := ioutil.ReadFile(filepath.Join(dir, v.Path))
+			if err != nil {
+				return err
+			}
+			src := fmt.Sprintf("src/%s", fname)
+			_, err = fmt.Fprintf(w, `%s: \n\techo %s > %s\n`, src, strconv.Quote(string(dat)), src)
 			if err != nil {
 				return err
 			}
