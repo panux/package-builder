@@ -214,6 +214,8 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 	for i, v := range pg.Sources {
 		fname := filepath.Base(v.Path)
 		switch v.Scheme {
+		case "http":
+			return errors.New("Insecure HTTP not supported for package sources")
 		case "https":
 			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tcurl %s > src/%s\n\n", fname, v.String(), fname)
 			if err != nil {
