@@ -1,4 +1,4 @@
-# package-builder (WIP) [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/panux/panux-dev)
+# package-builder (WIP) [![Gitter chat](https://badges.gitter.im/gitterHQ/gitter.png)](https://gitter.im/panux/panux-dev)[![Docker Pulls](https://img.shields.io/docker/pulls/panux/package-builder.svg)](https://hub.docker.com/r/panux/package-builder/)
 A tool to create panux packages
 
 [Packages here](https://github.com/panux/packages-main)
