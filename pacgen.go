@@ -261,7 +261,7 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 				return err
 			}
 		default:
-			return errors.New("Unsupported source scheme %s")
+			return fmt.Errorf("Unsupported source scheme %s://", v.Scheme)
 		}
 		srcs[i] = "src/" + fname
 	}
