@@ -19,7 +19,6 @@ trap cleanup EXIT
 
 echo "Parsing PackageGenerator and downloading files"
 pkgenconvert -in $1 -out $DIR/Makefile -arch $ARCH || { echo "Build prep failed"; exit 1; }
-
 cat $DIR/Makefile
 
 #run build

@@ -2,13 +2,13 @@ package panuxpackager
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"text/template"
 
@@ -257,7 +257,8 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 				return err
 			}
 			src := fmt.Sprintf("src/%s", fname)
-			_, err = fmt.Fprintf(w, "%s: \n\techo %s > %s\n", src, strconv.Quote(string(dat)), src)
+			dvar := strings.Replace(fname, ".", "_", -1)
+			_, err = fmt.Fprintf(w, "%s_dat=\"%s\"\nexport %s_dat\n%s: src\n\tbash -c 'echo \"\\$%s_dat\" | base64 -d > %s'\n", dvar, base64.StdEncoding.EncodeToString(dat), dvar, src, dvar, src)
 			if err != nil {
 				return err
 			}
