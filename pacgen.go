@@ -48,8 +48,9 @@ func ParseFile(file string) (pg RawPackageGenerator, err error) {
 	}
 	pg, err = ParseRaw(dat)
 	if err != nil {
-		pg.SrcPath = file
+		return RawPackageGenerator{}, err
 	}
+	pg.SrcPath = file
 	return
 }
 
@@ -256,7 +257,7 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 				return err
 			}
 			src := fmt.Sprintf("src/%s", fname)
-			_, err = fmt.Fprintf(w, `%s: \n\techo %s > %s\n`, src, strconv.Quote(string(dat)), src)
+			_, err = fmt.Fprintf(w, "%s: \n\techo %s > %s\n", src, strconv.Quote(string(dat)), src)
 			if err != nil {
 				return err
 			}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -25,6 +26,9 @@ func main() {
 	flag.Parse()
 	r, err := panuxpackager.ParseFile(infile)
 	chk(err)
+	if r.SrcPath == "" {
+		panic(errors.New("missing SrcPath"))
+	}
 	r.Arch = arch
 	pg, err := r.Preprocess()
 	chk(err)
