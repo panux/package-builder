@@ -1,10 +1,10 @@
-FROM golang:1.8-alpine3.6
+FROM alpine:3.6
 
 ADD . /build
 
 WORKDIR /build
 
-RUN apk add --no-cache git make bash curl
+RUN apk add --no-cache git make bash curl go
 
 RUN make install
 
