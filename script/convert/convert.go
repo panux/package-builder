@@ -6,6 +6,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"runtime"
 
 	"../.."
 )
@@ -19,10 +20,15 @@ func chk(err error) {
 func main() {
 	var out string
 	var infile string
-	var arch string
+	arch := runtime.GOARCH
+	switch arch {
+	case "amd64":
+		arch = "x86_64"
+	case "386":
+		arch = "x86"
+	}
 	flag.StringVar(&infile, "in", "", "input file to generate from")
 	flag.StringVar(&out, "out", "", "file to output to")
-	flag.StringVar(&arch, "arch", "x86_64", "cpu architecture")
 	flag.Parse()
 	r, err := panuxpackager.ParseFile(infile)
 	chk(err)
