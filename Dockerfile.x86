@@ -1,6 +1,6 @@
 FROM multiarch/alpine:x86-v3.6
 
-ADD ../.. /build
+ADD . /build
 
 WORKDIR /build
 
