@@ -10,7 +10,9 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 DIR=$(mktemp -d)
-ARCH=$(uname -m)
+if [ -z ARCH ]; then
+    ARCH=$(uname -m)
+fi
 
 function cleanup {
     rm -rf $DIR
