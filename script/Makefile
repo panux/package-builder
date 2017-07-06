@@ -12,4 +12,4 @@ gouname:
 
 uname: gouname
 	$(MAKE) -C gouname
-	mv gouname/uname uname
+	mv gouname/gouname uname
