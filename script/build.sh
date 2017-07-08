@@ -22,7 +22,7 @@ cat $DIR/Makefile
 
 #run build
 echo "Starting build. . . "
-make -C $DIR -j 30 all || { echo "Build failed"; exit 3; }
+make -C $DIR -j 10 all || { echo "Build failed"; exit 3; }
 echo "Build complete"
 
 echo "Transferring outputs"
