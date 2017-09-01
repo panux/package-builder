@@ -17,7 +17,8 @@ function cleanup {
 trap cleanup EXIT
 
 echo "Parsing PackageGenerator and downloading files"
-pkgenconvert -in $1 -out $DIR/Makefile || { echo "Build prep failed"; exit 1; }
+pkgenconvert -in $1 -out /tmp/src.tar.gz || { echo "Build prep failed"; exit 1; }
+tar -xvf /tmp/src.tar.gz -C $DIR
 cat $DIR/Makefile
 
 #run build

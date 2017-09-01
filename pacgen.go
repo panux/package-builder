@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -195,7 +196,7 @@ func dirGen(path string, w io.Writer) error {
 
 //GenSetupMake generates the Makefile to create the source package
 func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
-	_, err := fmt.Fprintln(w, "all: src.tar.gz\n\nsrc.tar.gz: sources destinations pkginfo\n\ttar -cf src.tar.gz . --exclude makefile")
+	_, err := fmt.Fprintln(w, "all: src.tar.gz\n\nsrc.tar.gz: sources destinations pkginfo tars\n\ttar -cvf src.tar.gz -C . . --exclude makefile")
 	if err != nil {
 		return err
 	}
@@ -392,15 +393,16 @@ func (pg PackageGenerator) SetupDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command("make", "-C", dir, "-j10", "-f", dir+"/makefile", "all")
-	err = cmd.Run()
+	cmd := exec.Command("make", "-C", dir, "-j10", "-f", "makefile", "all")
+	d, err := cmd.CombinedOutput()
 	if err != nil {
 		return err
 	}
 	if !cmd.ProcessState.Success() {
 		return errors.New("Make failed")
 	}
-	err = os.Remove(dir + "/Makefile")
+	fmt.Println(string(d))
+	err = os.Remove(dir + "/makefile")
 	if err != nil {
 		return err
 	}
@@ -408,10 +410,14 @@ func (pg PackageGenerator) SetupDir(dir string) error {
 }
 
 //GenPkgSrc generates a tar file with package source
-func (pg PackageGenerator) GenPkgSrc(w io.Writer) error {
-	dir := os.TempDir()
+func (pg PackageGenerator) GenPkgSrc(w io.Writer) (err error) {
+	dd, err := exec.Command("mktemp", "-d").Output()
+	if err != nil {
+		return err
+	}
+	dir := strings.TrimSpace(string(dd))
 	defer os.RemoveAll(dir)
-	err := pg.SetupDir(dir)
+	err = pg.SetupDir(dir)
 	if err != nil {
 		return err
 	}
@@ -419,10 +425,16 @@ func (pg PackageGenerator) GenPkgSrc(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	_, err = io.Copy(w, f)
+	defer func() {
+		e := f.Close()
+		if err == nil {
+			err = e
+		}
+	}()
+	n, err := io.Copy(w, f)
 	if err != nil {
 		return err
 	}
+	log.Printf("Copied %d bytes\n", n)
 	return nil
 }
