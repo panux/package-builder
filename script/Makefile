@@ -7,6 +7,7 @@ install: pkgenconvert fakename
 	rm /bin/uname
 	$(MAKE) -C fakename install
 	ln -s /usr/bin/uname /bin/uname
+	bash links.sh
 
 fakename:
 	git clone https://github.com/panux/fakename.git
