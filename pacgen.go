@@ -2,12 +2,13 @@ package panuxpackager
 
 import (
 	"bytes"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -67,6 +68,7 @@ var tools map[string]*Tool
 //PackageGenerator is a preprocessed package generator
 type PackageGenerator struct {
 	SrcPath           string
+	DestPath          string
 	Pkgs              pkgmap
 	OneShell          bool
 	Tools             []*Tool
@@ -191,8 +193,12 @@ func dirGen(path string, w io.Writer) error {
 	return err
 }
 
-//GenMake generates the Makefile
-func (pg PackageGenerator) GenMake(w io.Writer) error {
+//GenSetupMake generates the Makefile to create the source package
+func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
+	_, err := fmt.Fprintln(w, "all: src.tar.gz\n\nsrc.tar.gz: sources destinations pkginfo\n\ttar -cf src.tar.gz . --exclude makefile")
+	if err != nil {
+		return err
+	}
 	//Write package info strings
 	version := pg.Version.String()
 	for n, v := range pg.Pkgs {
@@ -216,7 +222,7 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 		}
 	}
 	//Write directory structure generation
-	err := dirGen("src", w)
+	err = dirGen("src", w)
 	if err != nil {
 		return err
 	}
@@ -236,7 +242,7 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 		case "http":
 			return errors.New("Insecure HTTP not supported for package sources")
 		case "https":
-			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tcurl %s > src/%s\n\n", fname, v.String(), fname)
+			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\tcurl %s > src/%s\n\n", fname, v.String(), fname)
 			if err != nil {
 				return err
 			}
@@ -246,19 +252,31 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 			}
 			u := *v
 			u.RawQuery = ""
-			_, err := fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
+			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
 			if err != nil {
 				return err
 			}
 		case "file":
 			dir, _ := filepath.Split(pg.SrcPath)
-			dat, err := ioutil.ReadFile(filepath.Join(dir, v.Path))
-			if err != nil {
-				return err
-			}
-			src := fmt.Sprintf("src/%s", fname)
-			dvar := strings.Replace(fname, ".", "_", -1)
-			_, err = fmt.Fprintf(w, "%s_dat=\"%s\"\nexport %s_dat\n%s: src\n\tbash -c 'echo \"\\$%s_dat\" | base64 -d > %s'\n", dvar, base64.StdEncoding.EncodeToString(dat), dvar, src, dvar, src)
+			srcpath := filepath.Join(dir, v.Path)
+			destpath := fmt.Sprintf("%s/src/%s", pg.DestPath, fname)
+			err = func() error {
+				sf, err := os.Open(srcpath)
+				if err != nil {
+					return err
+				}
+				defer sf.Close()
+				df, err := os.OpenFile(destpath, os.O_WRONLY|os.O_CREATE, 0600)
+				if err != nil {
+					return err
+				}
+				defer df.Close()
+				_, err = io.Copy(df, sf)
+				if err != nil {
+					return err
+				}
+				return nil
+			}()
 			if err != nil {
 				return err
 			}
@@ -270,18 +288,6 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 	_, err = fmt.Fprintf(w, "sources: %s\n\n", strings.Join(srcs, " "))
 	if err != nil {
 		return err
-	}
-	//BuildDependencies
-	if len(pg.BuildDependencies) > 0 {
-		_, err = fmt.Fprintf(w, "builddeps: \n\tapk add --no-cache %s\n\ttouch builddeps\n\n", strings.Join(pg.BuildDependencies, " "))
-		if err != nil {
-			return err
-		}
-	} else {
-		_, err = fmt.Fprintln(w, "builddeps: ")
-		if err != nil {
-			return err
-		}
 	}
 	//Destination directories
 	dests := make([]string, len(pg.Pkgs))
@@ -298,37 +304,123 @@ func (pg PackageGenerator) GenMake(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	//Build script
-	pr := ""
-	if pg.OneShell {
-		pr = ".ONESHELL:\n"
-	}
-	_, err = fmt.Fprintf(w, "%sbuild: sources builddeps src out\n\t%s\n\ttouch build\n\n", pr, strings.Join(strings.Split(pg.Script, "\n"), "\n\t"))
-	if err != nil {
-		return err
-	}
+	infos := make([]string, len(pg.Pkgs))
+	i = 0
 	//Write out package info files
 	for n := range pg.Pkgs {
 		_, err = fmt.Fprintf(w, "export %s_pkginfo\nout/%s/.pkginfo: out/%s\n\techo \"$$%s_pkginfo\" > out/%s/.pkginfo\n\n", strings.Replace(n, "-", "_", -1), n, n, strings.Replace(n, "-", "_", -1), n)
 		if err != nil {
 			return err
 		}
+		infos[i] = fmt.Sprintf("out/%s/.pkginfo", n)
+		i++
+	}
+	_, err = fmt.Fprintf(w, "pkginfo: %s\n", strings.Join(infos, " "))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+//GenMake generates the build Makefile
+func (pg PackageGenerator) GenMake(w io.Writer) error {
+	var err error
+	//BuildDependencies
+	if len(pg.BuildDependencies) > 0 {
+		_, err = fmt.Fprintf(w, "builddeps: \n\tapk add --no-cache %s\n\ttouch builddeps\n\n", strings.Join(pg.BuildDependencies, " "))
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = fmt.Fprintln(w, "builddeps: ")
+		if err != nil {
+			return err
+		}
 	}
 	//Tar packages
 	for n := range pg.Pkgs {
-		_, err = fmt.Fprintf(w, "tars/%s.tar.xz: tars out/%s/.pkginfo build\n\ttar -cf tars/%s.tar.xz -C out/%s .\n\n", n, n, n, n)
+		_, err = fmt.Fprintf(w, "tars/%s.tar.xz: out/%s/.pkginfo build\n\ttar -cf tars/%s.tar.xz -C out/%s .\n\n", n, n, n, n)
 		if err != nil {
 			return err
 		}
 	}
 	//Generate main target
 	pkgtargs := make([]string, len(pg.Pkgs))
-	i = 0
+	i := 0
 	for n := range pg.Pkgs {
 		pkgtargs[i] = fmt.Sprintf("tars/%s.tar.xz", n)
 		i++
 	}
 	_, err = fmt.Fprintf(w, "all: %s\n\n", strings.Join(pkgtargs, " "))
+	if err != nil {
+		return err
+	}
+	//Build script
+	pr := ""
+	if pg.OneShell {
+		pr = ".ONESHELL:\n"
+	}
+	_, err = fmt.Fprintf(w, "%sbuild: builddeps\n\t%s\n\ttouch build\n\n", pr, strings.Join(strings.Split(pg.Script, "\n"), "\n\t"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+//SetupDir downloads sources into a directory and loads in an appropriate Makefile
+func (pg PackageGenerator) SetupDir(dir string) error {
+	pg.DestPath = dir
+	err := func() error {
+		mf, err := os.OpenFile(dir+"/makefile", os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return err
+		}
+		defer mf.Close()
+		return pg.GenSetupMake(mf)
+	}()
+	if err != nil {
+		return err
+	}
+	err = func() error {
+		mf, err := os.OpenFile(dir+"/Makefile", os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return err
+		}
+		defer mf.Close()
+		return pg.GenMake(mf)
+	}()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("make", "-C", dir, "-j10", "-f", dir+"/makefile", "all")
+	err = cmd.Run()
+	if err != nil {
+		return err
+	}
+	if !cmd.ProcessState.Success() {
+		return errors.New("Make failed")
+	}
+	err = os.Remove(dir + "/Makefile")
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+//GenPkgSrc generates a tar file with package source
+func (pg PackageGenerator) GenPkgSrc(w io.Writer) error {
+	dir := os.TempDir()
+	defer os.RemoveAll(dir)
+	err := pg.SetupDir(dir)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(dir + "/src.tar.gz")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(w, f)
 	if err != nil {
 		return err
 	}

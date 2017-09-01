@@ -44,5 +44,5 @@ func main() {
 	f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY, 0600)
 	chk(err)
 	defer func() { chk(f.Close()) }()
-	chk(pg.GenMake(f))
+	chk(pg.GenPkgSrc(f))
 }

@@ -1,15 +1,12 @@
 pkgenconvert:
 	$(MAKE) -C convert
 
-install: pkgenconvert uname
+install: pkgenconvert fakename
 	$(MAKE) -C convert install
 	install -m 0700 build.sh /bin/buildpkg
 	rm /bin/uname
-	install -m 0700 uname /bin/uname
+	$(MAKE) -C fakename install
+	ln -s /usr/bin/uname /bin/uname
 
-gouname:
-	git clone https://github.com/jadr2ddude/gouname.git
-
-uname: gouname
-	$(MAKE) -C gouname
-	mv gouname/gouname uname
+fakename:
+	git clone https://github.com/panux/fakename.git
