@@ -6,6 +6,6 @@ WORKDIR /build
 
 RUN apk add --no-cache git make bash curl go musl-dev gcc
 
-RUN make install
+RUN make -j20 install
 
 ENTRYPOINT ["/bin/buildpkg"]

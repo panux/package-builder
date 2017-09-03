@@ -258,26 +258,11 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 				return err
 			}
 		case "file":
-			dir, _ := filepath.Split(pg.SrcPath)
-			srcpath := filepath.Join(dir, v.Path)
-			destpath := fmt.Sprintf("%s/src/%s", pg.DestPath, fname)
-			err = func() error {
-				sf, err := os.Open(srcpath)
-				if err != nil {
-					return err
-				}
-				defer sf.Close()
-				df, err := os.OpenFile(destpath, os.O_WRONLY|os.O_CREATE, 0600)
-				if err != nil {
-					return err
-				}
-				defer df.Close()
-				_, err = io.Copy(df, sf)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
+			fname = v.String()[len("file://"):]
+			dir := filepath.Dir(pg.SrcPath)
+			srcpath := filepath.Join(dir, fname)
+			destpath := fmt.Sprintf("src/%s", fname)
+			_, err = fmt.Fprintf(w, "\n%s: src\n\tcp %s %s\n", destpath, srcpath, destpath)
 			if err != nil {
 				return err
 			}
@@ -395,13 +380,13 @@ func (pg PackageGenerator) SetupDir(dir string) error {
 	}
 	cmd := exec.Command("make", "-C", dir, "-j10", "-f", "makefile", "all")
 	d, err := cmd.CombinedOutput()
+	fmt.Println(string(d))
 	if err != nil {
 		return err
 	}
 	if !cmd.ProcessState.Success() {
 		return errors.New("Make failed")
 	}
-	fmt.Println(string(d))
 	err = os.Remove(dir + "/makefile")
 	if err != nil {
 		return err
