@@ -150,6 +150,12 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		}
 		return fmt.Sprintf("(cd %s && ./configure %s)", dir, strings.Join(r.Data["configure"].([]string), " "))
 	}
+	tf["confarch"] = func() string {
+		return map[string]string{
+			"x86_64": "x86_64",
+			"x86":    "i686",
+		}[r.Arch]
+	}
 	pg.Version, err = version.NewVersion(r.Version)
 	if err != nil {
 		return npg, err
