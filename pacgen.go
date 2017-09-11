@@ -106,6 +106,50 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		}
 	}
 	tf := pg.toolfuncs()
+	tf["make"] = func(dir string, args ...string) string {
+		lines := make([]string, len(args))
+		for i, a := range args {
+			lines[i] = fmt.Sprintf("$(MAKE) -C %s %s", dir, a)
+		}
+		return strings.Join(lines, "\n")
+	}
+	tf["extract"] = func(name string, ext string) string {
+		return strings.Join(
+			[]string{
+				fmt.Sprintf("tar -xf %s-%s.tar.%s", name, r.Version, ext),
+				fmt.Sprintf("mv %s-%s %s", name, r.Version, name),
+			},
+			"\n")
+	}
+	tf["pkmv"] = func(file string, srcpkg string, destpkg string) string {
+		if strings.HasSuffix(file, "/") { //cut off trailing /
+			file = file[:len(file)-2]
+		}
+		dir, _ := filepath.Split(file)
+		mv := fmt.Sprintf("mv %s %s",
+			filepath.Join(srcpkg, file),
+			filepath.Join(destpkg, file),
+		)
+		if dir != "" {
+			return strings.Join([]string{
+				fmt.Sprintf("mkdir -p %s", filepath.Join(destpkg, dir)),
+				mv,
+			}, "\n")
+		}
+		return mv
+	}
+	tf["mvman"] = func(pkg string) string {
+		return fmt.Sprintf("mkdir -p %s-man/usr/share\nmv %s/usr/share/man %s-man/usr/share/man", pkg, pkg, pkg)
+	}
+	tf["mvhdr"] = func(pkg string) string {
+		return fmt.Sprintf("mkdir -p %s-headers/usr\nmv %s/usr/include %s-include/usr/include", pkg, pkg, pkg)
+	}
+	tf["configure"] = func(dir string) string {
+		if r.Data["configure"] == nil {
+			r.Data["configure"] = []string{}
+		}
+		return fmt.Sprintf("(cd %s && ./configure %s)", dir, strings.Join(r.Data["configure"].([]string), " "))
+	}
 	pg.Version, err = version.NewVersion(r.Version)
 	if err != nil {
 		return npg, err
@@ -249,10 +293,11 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 			}
 		case "git":
 			if filepath.Ext(fname) == ".git" {
-				fname = fname[:len(fname)-5]
+				fname = fname[:len(fname)-(1+len(".git"))]
 			}
 			u := *v
 			u.RawQuery = ""
+			u.Scheme = "https" //Use https for git clones
 			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
 			if err != nil {
 				return err
