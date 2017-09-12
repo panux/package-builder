@@ -303,7 +303,6 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 			}
 			u := *v
 			u.RawQuery = ""
-			u.Scheme = "https" //Use https for git clones
 			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\tgit clone %s src/%s\n\tgit -C src/%s checkout %s\n\n", fname, u.String(), fname, fname, v.Query().Get("checkout"))
 			if err != nil {
 				return err
