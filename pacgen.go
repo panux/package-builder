@@ -127,12 +127,12 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		}
 		dir, _ := filepath.Split(file)
 		mv := fmt.Sprintf("mv %s %s",
-			filepath.Join(srcpkg, file),
-			filepath.Join(destpkg, file),
+			filepath.Join("out", srcpkg, file),
+			filepath.Join("out", destpkg, dir),
 		)
 		if dir != "" {
 			return strings.Join([]string{
-				fmt.Sprintf("mkdir -p %s", filepath.Join(destpkg, dir)),
+				fmt.Sprintf("mkdir -p %s", filepath.Join("out", destpkg, dir)),
 				mv,
 			}, "\n")
 		}
