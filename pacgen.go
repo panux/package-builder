@@ -162,11 +162,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 	}
 	pg.Sources = make([]*url.URL, len(r.Sources))
 	for i, v := range r.Sources {
-		tmpl, err := template.New("sources").Parse(v)
+		tmpl, err := template.New("sources").Funcs(tf).Parse(v)
 		if err != nil {
 			return npg, err
 		}
-		tmpl.Funcs(tf)
 		buf := bytes.NewBuffer(nil)
 		err = tmpl.Execute(buf, r)
 		if err != nil {
@@ -181,11 +180,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 	}
 	pg.BuildDependencies = make([]string, len(r.BuildDependencies))
 	for i, v := range r.BuildDependencies {
-		tmpl, err := template.New("build_dependencies").Parse(v)
+		tmpl, err := template.New("build_dependencies").Funcs(tf).Parse(v)
 		if err != nil {
 			return npg, err
 		}
-		tmpl.Funcs(tf)
 		buf := bytes.NewBuffer(nil)
 		err = tmpl.Execute(buf, r)
 		if err != nil {
@@ -205,11 +203,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		if y != nil && y.Dependencies != nil {
 			pg.Pkgs[x].Dependencies = make([]string, len(y.Dependencies))
 			for i, v := range y.Dependencies {
-				tmpl, err := template.New("dependencies").Parse(v)
+				tmpl, err := template.New("dependencies").Funcs(tf).Parse(v)
 				if err != nil {
 					return npg, err
 				}
-				tmpl.Funcs(tf)
 				buf := bytes.NewBuffer(nil)
 				err = tmpl.Execute(buf, r)
 				if err != nil {
@@ -221,11 +218,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 			pg.Pkgs[x].Dependencies = nval
 		}
 	}
-	stmpl, err := template.New("script").Parse(strings.Join(r.Script, "\n"))
+	stmpl, err := template.New("script").Funcs(tf).Parse(strings.Join(r.Script, "\n"))
 	if err != nil {
 		return npg, err
 	}
-	stmpl.Funcs(tf)
 	buf := bytes.NewBuffer(nil)
 	err = stmpl.Execute(buf, r)
 	if err != nil {
