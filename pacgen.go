@@ -139,10 +139,10 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 		return mv
 	}
 	tf["mvman"] = func(pkg string) string {
-		return fmt.Sprintf("mkdir -p %s-man/usr/share\nmv %s/usr/share/man %s-man/usr/share/man", pkg, pkg, pkg)
+		return fmt.Sprintf("mkdir -p out/%s-man/usr/share\nmv out/%s/usr/share/man out/%s-man/usr/share/man", pkg, pkg, pkg)
 	}
 	tf["mvhdr"] = func(pkg string) string {
-		return fmt.Sprintf("mkdir -p %s-headers/usr\nmv %s/usr/include %s-include/usr/include", pkg, pkg, pkg)
+		return fmt.Sprintf("mkdir -p out/%s-headers/usr\nmv out/%s/usr/include out/%s-include/usr/include", pkg, pkg, pkg)
 	}
 	tf["configure"] = func(dir string) string {
 		if r.Data["configure"] == nil {
