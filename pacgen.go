@@ -116,7 +116,7 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 	tf["extract"] = func(name string, ext string) string {
 		return strings.Join(
 			[]string{
-				fmt.Sprintf("tar -xf %s-%s.tar.%s", name, r.Version, ext),
+				fmt.Sprintf("tar -xf src/%s-%s.tar.%s", name, r.Version, ext),
 				fmt.Sprintf("mv %s-%s %s", name, r.Version, name),
 			},
 			"\n")
