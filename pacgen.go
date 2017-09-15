@@ -146,9 +146,14 @@ func (r RawPackageGenerator) Preprocess() (pg PackageGenerator, err error) {
 	}
 	tf["configure"] = func(dir string) string {
 		if r.Data["configure"] == nil {
-			r.Data["configure"] = []string{}
+			r.Data["configure"] = []interface{}{}
 		}
-		return fmt.Sprintf("(cd %s && ./configure %s)", dir, strings.Join(r.Data["configure"].([]string), " "))
+		car := r.Data["configure"].([]interface{})
+		ca := make([]string, len(car))
+		for i, v := range car {
+			ca[i] = v.(string)
+		}
+		return fmt.Sprintf("(cd %s && ./configure %s)", dir, strings.Join(ca, " "))
 	}
 	tf["confarch"] = func() string {
 		return map[string]string{
