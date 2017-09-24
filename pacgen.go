@@ -292,7 +292,12 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 		fname := filepath.Base(v.Path)
 		switch v.Scheme {
 		case "http":
-			return errors.New("Insecure HTTP not supported for package sources")
+			hash := v.Query().Get("hash")
+			if hash != "" {
+				fmt.Fprintf(w, "\nsrc/%s: src\n\twget %s -O src/%s\n\techo \"%s  %s\" > %s.check\n\tsha256sum -c %s.check\n\n", fname, v.String(), fname, hash, fname, fname, fname)
+			} else {
+				return errors.New("Insecure HTTP not supported for package sources")
+			}
 		case "https":
 			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\twget %s -O src/%s\n\n", fname, v.String(), fname)
 			if err != nil {
