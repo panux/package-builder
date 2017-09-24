@@ -4,7 +4,7 @@ ADD . /build
 
 WORKDIR /build
 
-RUN apk add --no-cache git make bash curl go musl-dev gcc
+RUN apk add --no-cache git make bash curl wget go musl-dev gcc
 
 RUN make install
 

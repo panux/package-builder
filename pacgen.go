@@ -294,7 +294,7 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 		case "http":
 			return errors.New("Insecure HTTP not supported for package sources")
 		case "https":
-			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\tcurl %s > src/%s\n\n", fname, v.String(), fname)
+			_, err = fmt.Fprintf(w, "\nsrc/%s: src\n\twget %s -O src/%s\n\n", fname, v.String(), fname)
 			if err != nil {
 				return err
 			}
