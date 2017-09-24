@@ -268,7 +268,7 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 			return err
 		}
 		ystr := string(dat)
-		_, err = fmt.Fprintf(w, "define %s_pkginfo = \n%s\nendef\n", strings.Replace(n, "-", "_", -1), ystr)
+		_, err = fmt.Fprintf(w, "define _%s_pkginfo = \n%s\nendef\n", strings.Replace(n, "-", "_", -1), ystr)
 		if err != nil {
 			return err
 		}
@@ -350,7 +350,7 @@ func (pg PackageGenerator) GenSetupMake(w io.Writer) error {
 	i = 0
 	//Write out package info files
 	for n := range pg.Pkgs {
-		_, err = fmt.Fprintf(w, "export %s_pkginfo\nout/%s/.pkginfo: out/%s\n\techo \"$$%s_pkginfo\" > out/%s/.pkginfo\n\n", strings.Replace(n, "-", "_", -1), n, n, strings.Replace(n, "-", "_", -1), n)
+		_, err = fmt.Fprintf(w, "export _%s_pkginfo\nout/%s/.pkginfo: out/%s\n\techo \"$$_%s_pkginfo\" > out/%s/.pkginfo\n\n", strings.Replace(n, "-", "_", -1), n, n, strings.Replace(n, "-", "_", -1), n)
 		if err != nil {
 			return err
 		}
